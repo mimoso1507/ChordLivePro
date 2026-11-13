@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Chord Live Pro</string>
+    <string name="title_activity_main">Chord Live Pro</string>
+    <string name="package_name">com.chordlivepro.app</string>
+    <string name="custom_url_scheme">com.chordlivepro.app</string>
+</resources>

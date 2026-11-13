@@ -1,0 +1,9 @@
+{
+  "appId": "com.chordlivepro.app",
+  "appName": "Chord Live Pro",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#101116",
+    "allowMixedContent": false
+  }
+}
