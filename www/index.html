@@ -291,17 +291,17 @@ const WAVES={piano:[0,1,.55,.34,.2,.13,.08,.05,.035,.02],bright:[0,1,.75,.55,.42
   organ:[0,.55,1,0,.65,0,.42,0,.3],musicbox:[0,1,.08,0,.38,0,.12,0,.05],guitar:[0,1,.6,.42,.33,.25,.2,.16,.12,.09,.07,.05,.04]};
 class Engine{
   constructor(ctx){this.ctx=ctx;const c=ctx;this.out=c.createGain();
-    const comp=c.createDynamicsCompressor();comp.threshold.value=-12;comp.knee.value=10;comp.ratio.value=4;comp.attack.value=.003;comp.release.value=.25;
+    const comp=c.createDynamicsCompressor();comp.threshold.value=-10;comp.knee.value=6;comp.ratio.value=12;comp.attack.value=.002;comp.release.value=.2;this.lim=c.createGain();this.lim.gain.value=.7;
     this.dry=c.createGain();this.wet=c.createGain();this.conv=c.createConvolver();this.conv.buffer=this.impulse(2.6);
-    this.out.connect(this.dry);this.dry.connect(comp);this.out.connect(this.conv);this.conv.connect(this.wet);this.wet.connect(comp);comp.connect(c.destination);
+    this.out.connect(this.dry);this.dry.connect(comp);this.out.connect(this.conv);this.conv.connect(this.wet);this.wet.connect(comp);comp.connect(this.lim);this.lim.connect(c.destination);
     this.waves={};this.live=[];this.apply();}
   impulse(sec){const sr=this.ctx.sampleRate,len=Math.floor(sr*sec),b=this.ctx.createBuffer(2,len,sr);
     for(let ch=0;ch<2;ch++){const d=b.getChannelData(ch);for(let i=0;i<len;i++){const k=i/len;d[i]=(Math.random()*2-1)*Math.pow(1-k,3.4)*(i<sr*.012?i/(sr*.012):1);}}return b;}
-  apply(){const L=S.reverbLevel/100;this.wet.gain.value=S.reverb?L*.85:0;this.dry.gain.value=S.reverb?1-L*.2:1;this.out.gain.value=S.volume/100*.9;}
+  apply(){const L=S.reverbLevel/100;this.wet.gain.value=S.reverb?L*.45:0;this.dry.gain.value=S.reverb?1-L*.15:1;this.out.gain.value=S.volume/100*.85;}
   wave(n){if(!this.waves[n]){const a=WAVES[n];this.waves[n]=this.ctx.createPeriodicWave(new Float32Array(a.length),new Float32Array(a));}return this.waves[n];}
   play(midi,t,vel,inst,dest){
     if(inst&&inst.startsWith('sf:')){const ins=LOADED[inst];if(ins)return this.playSF(ins,midi,t,vel,dest);inst='piano';}
-    const c=this.ctx,f=440*Math.pow(2,(midi-69)/12),g=c.createGain(),oscs=[];let tau=0,peak=vel*.3,held=false;
+    const c=this.ctx,f=440*Math.pow(2,(midi-69)/12),g=c.createGain(),oscs=[];let tau=0,peak=vel*.17,held=false;
     g.gain.setValueAtTime(0,t);g.connect(dest||this.out);
     const pitchTau=base=>clamp(base*Math.pow(2,-(midi-60)/26),.25,base*2.2);
     if(inst==='piano'||inst==='bright'||inst==='guitar'||inst==='musicbox'){
@@ -331,7 +331,7 @@ class Engine{
     oscs.forEach(o=>o.start(t));
     const natural=held?Infinity:t+tau*7+.2;if(isFinite(natural))oscs.forEach(o=>o.stop(natural));
     const v={g,oscs,end:natural,held,stopped:false,
-      stop:(at,rt)=>{if(v.stopped)return;v.stopped=true;at=Math.max(at,t+.01);g.gain.setTargetAtTime(0,at,rt);const e=at+rt*7+.05;if(e<v.end){v.end=e;oscs.forEach(o=>{try{o.stop(e);}catch(_){}});}}};
+      stop:(at,rt)=>{if(v.stopped)return;v.stopped=true;at=Math.max(at,t+.01);g.gain.cancelScheduledValues(at);g.gain.setTargetAtTime(0,at,rt);const e=at+rt*7+.05;if(e<v.end){v.end=e;oscs.forEach(o=>{try{o.stop(e);}catch(_){}});}}};
     if(!dest||dest===this.out){this.live.push(v);this.prune();}
     return v;}
   playSF(ins,midi,t,vel,dest){
@@ -341,14 +341,14 @@ class Engine{
     const g=c.createGain();g.connect(dest||this.out);const srcs=[];let end=t,held=false,rel=.05;
     for(const r of rs){const s=c.createBufferSource();s.buffer=r.buf;const semis=(midi-r.root)*r.scale/100+r.tune/100;s.playbackRate.value=Math.pow(2,semis/12);
       if(r.loop&&r.le>r.ls+8){s.loop=true;s.loopStart=(r.ls-r.start)/r.rate;s.loopEnd=(r.le-r.start)/r.rate;held=true;}
-      const amp=Math.pow(10,-r.att*.4/200)*vel*vel*.75,eg=c.createGain(),a=Math.max(.002,r.env.a),h=r.env.h;
+      const amp=Math.pow(10,-r.att*.4/200)*vel*vel*.45,eg=c.createGain(),a=Math.max(.002,r.env.a),h=r.env.h;
       eg.gain.setValueAtTime(0,t);eg.gain.linearRampToValueAtTime(amp,t+a);eg.gain.setValueAtTime(amp,t+a+h);eg.gain.setTargetAtTime(amp*r.env.s,t+a+h,Math.max(.01,r.env.d/5));
       s.connect(eg);if(r.pan&&c.createStereoPanner){const p=c.createStereoPanner();p.pan.value=r.pan;eg.connect(p);p.connect(g);}else eg.connect(g);
       s.start(t);srcs.push(s);rel=Math.max(rel,Math.min(3,r.env.r));
       if(!s.loop)end=Math.max(end,t+r.buf.duration/s.playbackRate.value);}
     const natural=held?Infinity:end+.05;if(isFinite(natural))srcs.forEach(s=>s.stop(natural));
     const v={g,oscs:srcs,end:natural,held,stopped:false,
-      stop:(at,rt)=>{if(v.stopped)return;v.stopped=true;at=Math.max(at,t+.01);const tau=Math.max(.015,rel/5,rt*.5);g.gain.setTargetAtTime(0,at,tau);const e=at+tau*7+.05;
+      stop:(at,rt)=>{if(v.stopped)return;v.stopped=true;at=Math.max(at,t+.01);const tau=Math.max(.015,Math.min(rel/5,.4),rt*.5);g.gain.cancelScheduledValues(at);g.gain.setTargetAtTime(0,at,tau);const e=at+tau*7+.05;
         if(e<v.end){v.end=e;srcs.forEach(s=>{try{s.stop(e);}catch(_){}});}}};
     if(!dest||dest===this.out){this.live.push(v);this.prune();}
     return v;}
@@ -515,7 +515,7 @@ let REC=null; // {t0, events}
 function noteOn(midi,vel,delay=0){const e=audio(),t=ctx.currentTime+delay;const v=e.play(midi,t,vel,S.inst);
   let ev=null;if(REC&&REC.t0!=null&&t>=REC.t0){ev={t:+(t-REC.t0).toFixed(4),m:midi,v:+vel.toFixed(2),i:S.inst,d:null,r:null};REC.events.push(ev);}
   return {v,ev,t};}
-function releaseTau(kind){if(S.sus)return 1.6;return kind==='pad'?.06+S.padHold/100*.62:(S.resonance?.04+S.keyHold/100*.5:.06);}
+function releaseTau(kind){if(S.sus)return 1.2;return kind==='pad'?.04+S.padHold/100*.16:(S.resonance?.03+S.keyHold/100*.12:.04);}
 function noteOff(h,kind){if(!h)return;const now=ctx.currentTime;
   if(S.sus&&!h.v.held){if(h.ev){h.ev.d=null;}return;} // pedal: deja sonar
   const r=releaseTau(kind);h.v.stop(now,r);if(h.ev){h.ev.d=+Math.max(.02,now-h.t).toFixed(4);h.ev.r=r;}}
@@ -647,7 +647,7 @@ function buildPads(){
   const trig=(id,cell)=>{const d=cell.dataset,ch=S.banks[d.b][d.c];
     if(editing&&d.k==='head'){editing={b:+d.b,c:+d.c};render();previewChord();return;}
     const notes=cellNotes(ch,d.k,+d.j),gap=d.k==='head'?.018:.007,vel=d.k==='bass'?.8:.68;
-    const hs=notes.map((m,i)=>noteOn(m,vel*(i===0&&d.k!=='bass'?.92:1),i*gap));
+    const nv=vel*Math.min(1,1.7/Math.sqrt(notes.length));const hs=notes.map((m,i)=>noteOn(m,nv*(i===0&&d.k!=='bass'?.92:1),i*gap));
     cell.classList.add('hit');act.set(id,{cell,hs});buzz();};
   const rel=id=>{const a=act.get(id);if(!a)return;act.delete(id);a.hs.forEach(h=>noteOff(h,'pad'));
     if(![...act.values()].some(x=>x.cell===a.cell))a.cell.classList.remove('hit');};
