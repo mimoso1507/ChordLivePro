@@ -1,4 +1,4 @@
-name: Compilar APK
+name: Compilar APK y EXE
 
 on:
   push:
@@ -53,6 +53,48 @@ jobs:
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: Chord Live Pro 1.0.${{ github.run_number }}
-          body: APK lista para instalar en Android. Descarga ChordLivePro-v${{ env.APP_VERSION }}.apk desde el teléfono.
+          body: "Android: ChordLivePro-v${{ env.APP_VERSION }}.apk · Windows: ChordLivePro-v${{ env.APP_VERSION }}.exe (se abre a pantalla completa; ESC para salir, F11 para volver)."
           files: ChordLivePro-v*.apk
           make_latest: true
+
+  exe:
+    needs: apk
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Preparar la app de escritorio
+        run: |
+          V=1.0.${{ github.run_number }}
+          echo "APP_VERSION=$V" >> "$GITHUB_ENV"
+          sed -i "s/__APP_VERSION__/$V/" www/index.html
+          mkdir -p desktop/app
+          cp www/index.html www/lame.min.js desktop/app/
+          cd desktop
+          npm install --no-audit --no-fund
+          npm version "$V" --no-git-tag-version --allow-same-version
+
+      - name: Compilar el .exe
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --win portable --x64 --publish never
+
+      - name: Guardar el .exe como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChordLivePro-v${{ env.APP_VERSION }}-windows
+          path: desktop/dist/ChordLivePro-v*.exe
+
+      - name: Agregar el .exe a la versión
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.APP_VERSION }}
+          files: desktop/dist/ChordLivePro-v*.exe

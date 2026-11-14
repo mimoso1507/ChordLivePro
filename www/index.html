@@ -479,7 +479,8 @@ const CAP=window.Capacitor;
 const NATIVE=!!(CAP&&CAP.isNativePlatform&&CAP.isNativePlatform());
 const FSP=NATIVE?((CAP.registerPlugin&&CAP.registerPlugin('Filesystem'))||(CAP.Plugins&&CAP.Plugins.Filesystem)):null;
 const ROOT='ChordLivePro',DIR='DOCUMENTS';
-const FOLDER_LABEL=NATIVE?'Documentos/ChordLivePro':'este navegador';
+const DESKTOP=/Electron/i.test(navigator.userAgent);
+const FOLDER_LABEL=NATIVE?'Documentos/ChordLivePro':DESKTOP?'esta computadora':'este navegador';
 const idb={db:null,
   open(){return this.db||(this.db=new Promise((res,rej)=>{const r=indexedDB.open('chordlivepro',1);r.onupgradeneeded=()=>r.result.createObjectStore('files');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}));},
   async tx(mode,fn){const db=await this.open();return new Promise((res,rej)=>{const t=db.transaction('files',mode),st=t.objectStore('files'),q=fn(st);t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error);});},
@@ -504,7 +505,7 @@ const FS={
   async list(dir){if(!NATIVE){try{const ks=await idb.keys();return ks.filter(k=>k.startsWith(dir+'/')).map(k=>k.slice(dir.length+1)).filter(n=>!n.includes('/'));}catch(e){return [];}}
     try{await this.perm();const r=await FSP.readdir({path:ROOT+'/'+dir,directory:DIR});return r.files.map(f=>typeof f==='string'?f:f.name);}catch(e){return [];}},
   async del(path){try{if(!NATIVE)await idb.del(path);else await FSP.deleteFile({path:ROOT+'/'+path,directory:DIR});}catch(e){}},
-  async exportFile(name,blob){if(!NATIVE){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);return 'Descargas';}
+  async exportFile(name,blob){if(!NATIVE){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);return DESKTOP?'Documentos/ChordLivePro/grabaciones':'Descargas';}
     return this.writeBin('grabaciones/'+name,new Uint8Array(await blob.arrayBuffer()));}
 };
 
@@ -1059,6 +1060,29 @@ $('#btnMode').onclick=()=>{drumView=false;openModes();};$('#btnLabels').onclick=
 document.addEventListener('contextmenu',e=>e.preventDefault());
 window.addEventListener('resize',()=>keyboards.forEach(k=>k.layout()));
 $('#splashVer').textContent='Versión '+APP_VERSION;
+/* =================== teclado de la computadora =================== */
+const KMAP={KeyA:0,KeyW:1,KeyS:2,KeyE:3,KeyD:4,KeyF:5,KeyT:6,KeyG:7,KeyY:8,KeyH:9,KeyU:10,KeyJ:11,KeyK:12,KeyO:13,KeyL:14,KeyP:15,Semicolon:16,Quote:17};
+const kHeld=new Map();let kOct=S.kOct||4;
+const kbVisual=(m,on)=>{for(const k of keyboards){const e=k.els[m];if(e)e.classList.toggle('down',on);}};
+const padByKey=(code,shift)=>{const d=/^Digit(\d)$/.exec(code);if(!d)return null;const i=(+d[1]+9)%10,b=shift?1:0;return S.banks[b]&&S.banks[b][i]?{b,i}:null;};
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){if(layer.firstChild)closeAll();else if(editing){editing=null;render();}else if(drumView){drumView=false;render();}return;}
+  const tg=e.target;if(tg&&(tg.tagName==='INPUT'||tg.tagName==='SELECT'||tg.tagName==='TEXTAREA'))return;
+  if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||!$('#splash').hidden)return;
+  if(e.code==='KeyZ'){kOct=clamp(kOct-1,1,7);S.kOct=kOct;save();toast('Teclado de la PC: octava '+kOct);return;}
+  if(e.code==='KeyX'){kOct=clamp(kOct+1,1,7);S.kOct=kOct;save();toast('Teclado de la PC: octava '+kOct);return;}
+  if(e.code==='Space'){e.preventDefault();DM.playing?dmStop():dmStart();return;}
+  if(kHeld.has(e.code))return;
+  if(e.code in KMAP){const m=12*(kOct+1)+KMAP[e.code];kHeld.set(e.code,{h:noteOn(m,.8),m});kbVisual(m,true);buzz();return;}
+  const pd=padByKey(e.code,e.shiftKey);if(pd){const ch=S.banks[pd.b][pd.i];const ns=cellNotes(ch,'head');const nv=.68*Math.min(1,1.7/Math.sqrt(ns.length));
+    kHeld.set(e.code,{hs:ns.map((m,k)=>noteOn(m,nv,k*.018))});
+    document.querySelectorAll(`.cell.head[data-b="${pd.b}"][data-c="${pd.i}"]`).forEach(x=>x.classList.add('hit'));}
+});
+document.addEventListener('keyup',e=>{const h=kHeld.get(e.code);if(!h)return;kHeld.delete(e.code);
+  if(h.h){noteOff(h.h,'key');if(![...kHeld.values()].some(x=>x.m===h.m))kbVisual(h.m,false);}
+  if(h.hs){h.hs.forEach(x=>noteOff(x,'pad'));document.querySelectorAll('.cell.head.hit').forEach(x=>x.classList.remove('hit'));}});
+window.addEventListener('blur',()=>{for(const [c,h] of kHeld){if(h.h){noteOff(h.h,'key');kbVisual(h.m,false);}if(h.hs)h.hs.forEach(x=>noteOff(x,'pad'));}kHeld.clear();});
+if(DESKTOP){$('.tag').textContent='Toca con el ratón o con el teclado: A W S E D F T G Y H U J K O L P son las teclas del piano, Z y X cambian de octava, 1 al 0 tocan los acordes (Mayús para la segunda fila) y la barra espaciadora arranca el ritmo. ESC sale de pantalla completa y F11 vuelve.';}
 render();
 loadCustomList().then(()=>{if(S.inst.startsWith('sf:'))loadCustom(S.inst).catch(()=>{S.inst='piano';save();});});
 })();

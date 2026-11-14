@@ -1,0 +1,23 @@
+{
+  "name": "chord-live-pro",
+  "version": "1.0.0",
+  "description": "Chord Live Pro para Windows",
+  "main": "main.js",
+  "author": "Chord Live Pro",
+  "private": true,
+  "devDependencies": {
+    "electron": "33.4.11",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.chordlivepro.desktop",
+    "productName": "Chord Live Pro",
+    "files": ["main.js", "icon.png", "app/**"],
+    "directories": { "output": "dist" },
+    "win": {
+      "target": [{ "target": "portable", "arch": ["x64"] }],
+      "icon": "icon.png"
+    },
+    "portable": { "artifactName": "ChordLivePro-v${version}.exe" }
+  }
+}
