@@ -196,6 +196,8 @@ select{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid #c9ccd4;b
 .xb{padding:5px 10px;border-radius:999px;background:#e3e5eb;color:#1f5f94;font-weight:600;font-size:13px}
 .xb:active{background:#cfd3dc}
 .drow input[type=range]{width:100%;accent-color:#1f78c8;margin-top:8px}
+.dver{padding:16px 20px 22px;color:var(--sheet-dim);font-size:13px;font-variant-numeric:tabular-nums}
+.hint.ver{margin-top:6px;font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
@@ -226,6 +228,7 @@ select{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid #c9ccd4;b
     <p class="tag">Teclado, pads de acordes, metrónomo y grabadora en el mismo escenario. Gira el teléfono en horizontal para tener más teclas.</p>
     <button class="go" id="btnGo">Tocar</button>
     <p class="hint">Mantén pulsado el nombre de un acorde para cambiarlo.</p>
+    <p class="hint ver" id="splashVer"></p>
   </div>
 </div>
 
@@ -234,6 +237,7 @@ select{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid #c9ccd4;b
 (()=>{
 "use strict";
 /* =================== utilidades =================== */
+const APP_VERSION=(v=>v.startsWith('__')?'dev':v)('__APP_VERSION__');
 const $=s=>document.querySelector(s);
 const el=(tag,cls,html)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e;};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -278,7 +282,7 @@ const PRESETS=[
 ];
 const DEF={mode:'chords',labels:'name',inst:'piano',visible:15,reverb:true,reverbLevel:60,volume:80,sus:false,resonance:true,keyHold:85,padHold:100,
   vibrate:false,lock:false,countIn:true,metro:false,bpm:75,meter:4,kbHidden:false,chordCells:4,bassCells:3,perRow:8,
-  quant:'off',qStrength:100,banks:[PRESETS[0].map(c=>({...c}))],first1:wIndex(60),first2:wIndex(48)};
+  quant:'off',latency:'normal',qStrength:100,banks:[PRESETS[0].map(c=>({...c}))],first1:wIndex(60),first2:wIndex(48)};
 const S=Object.assign({},DEF,store.get('clp_settings',{}));
 if(!Array.isArray(S.banks)||!S.banks.length)S.banks=DEF.banks;
 const save=()=>store.set('clp_settings',S);
@@ -292,12 +296,12 @@ const WAVES={piano:[0,1,.55,.34,.2,.13,.08,.05,.035,.02],bright:[0,1,.75,.55,.42
 class Engine{
   constructor(ctx){this.ctx=ctx;const c=ctx;this.out=c.createGain();
     const comp=c.createDynamicsCompressor();comp.threshold.value=-10;comp.knee.value=6;comp.ratio.value=12;comp.attack.value=.002;comp.release.value=.2;this.lim=c.createGain();this.lim.gain.value=.7;
-    this.dry=c.createGain();this.wet=c.createGain();this.conv=c.createConvolver();this.conv.buffer=this.impulse(2.6);
-    this.out.connect(this.dry);this.dry.connect(comp);this.out.connect(this.conv);this.conv.connect(this.wet);this.wet.connect(comp);comp.connect(this.lim);this.lim.connect(c.destination);
+    this.dry=c.createGain();this.wet=c.createGain();this.conv=c.createConvolver();this.conv.buffer=this.impulse(1.6);this.convOn=false;
+    this.out.connect(this.dry);this.dry.connect(comp);this.conv.connect(this.wet);this.wet.connect(comp);comp.connect(this.lim);this.lim.connect(c.destination);
     this.waves={};this.live=[];this.apply();}
   impulse(sec){const sr=this.ctx.sampleRate,len=Math.floor(sr*sec),b=this.ctx.createBuffer(2,len,sr);
     for(let ch=0;ch<2;ch++){const d=b.getChannelData(ch);for(let i=0;i<len;i++){const k=i/len;d[i]=(Math.random()*2-1)*Math.pow(1-k,3.4)*(i<sr*.012?i/(sr*.012):1);}}return b;}
-  apply(){const L=S.reverbLevel/100;this.wet.gain.value=S.reverb?L*.45:0;this.dry.gain.value=S.reverb?1-L*.15:1;this.out.gain.value=S.volume/100*.85;}
+  apply(){const L=S.reverbLevel/100,want=S.reverb&&L>0;if(want!==this.convOn){try{want?this.out.connect(this.conv):this.out.disconnect(this.conv);}catch(e){}this.convOn=want;}this.wet.gain.value=S.reverb?L*.45:0;this.dry.gain.value=S.reverb?1-L*.15:1;this.out.gain.value=S.volume/100*.85;}
   wave(n){if(!this.waves[n]){const a=WAVES[n];this.waves[n]=this.ctx.createPeriodicWave(new Float32Array(a.length),new Float32Array(a));}return this.waves[n];}
   play(midi,t,vel,inst,dest){
     if(inst&&inst.startsWith('sf:')){const ins=LOADED[inst];if(ins)return this.playSF(ins,midi,t,vel,dest);inst='piano';}
@@ -353,13 +357,13 @@ class Engine{
     if(!dest||dest===this.out){this.live.push(v);this.prune();}
     return v;}
   prune(){if(this.offline)return;const now=this.ctx.currentTime;this.live=this.live.filter(v=>v.end>now);
-    while(this.live.length>44){const v=this.live.shift();v.stop(now,.02);}}
+    while(this.live.length>28){const v=this.live.shift();v.stop(now,.02);}}
   click(t,acc,dest){const c=this.ctx,o=c.createOscillator(),g=c.createGain();o.frequency.value=acc?1760:1180;o.type='square';
     g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(acc?.28:.18,t+.001);g.gain.exponentialRampToValueAtTime(.0001,t+.05);
     o.connect(g);g.connect(dest||this.ctx.destination);o.start(t);o.stop(t+.06);}
 }
 let ctx=null,E=null;
-function audio(){if(!ctx){const AC=window.AudioContext||window.webkitAudioContext;ctx=new AC({latencyHint:'interactive'});E=new Engine(ctx);}
+function audio(){if(!ctx){const AC=window.AudioContext||window.webkitAudioContext;ctx=new AC({latencyHint:{low:'interactive',normal:'balanced',stable:'playback'}[S.latency]||'balanced'});E=new Engine(ctx);}
   if(ctx.state!=='running')ctx.resume();return E;}
 document.addEventListener('pointerup',()=>{if(ctx&&ctx.state!=='running')ctx.resume();},true);
 
@@ -750,7 +754,8 @@ function openMenu(){
     <div style="height:6px"></div>
     <button class="dlink" id="mRecs">${IC.folder}Lista de grabaciones</button>
     <button class="dlink" id="mSet">${IC.gear}Ajustes</button>
-    <button class="dlink" id="mFull">${IC.full}Pantalla completa</button>`,{drawer:true});
+    <button class="dlink" id="mFull">${IC.full}Pantalla completa</button>
+    <div class="dver">Chord Live Pro · versión ${APP_VERSION}</div>`,{drawer:true});
   b.querySelectorAll('[data-sw]').forEach(s=>s.onclick=()=>{const k=s.dataset.sw;S[k]=!S[k];s.classList.toggle('on',S[k]);save();if(E)E.apply();syncTop();keyboards.forEach(x=>x.position());});
   b.querySelectorAll('[data-st]').forEach(s=>s.onclick=()=>{const k=s.dataset.st,[lo,hi]=LIMITS[k];const v=clamp(S[k]+(+s.dataset.d),lo,hi);if(v===S[k])return;S[k]=v;
     if(k==='rows'){while(S.banks.length<v){const p=PRESETS[S.banks.length%PRESETS.length];S.banks.push(Array.from({length:S.perRow},(_,i)=>({...p[i%p.length]})));}S.banks.length=v;if(v>1&&!S.kbHidden&&S.mode==='chords'){S.kbHidden=true;toast('Teclado oculto para dar espacio; muéstralo con la flecha');}}
@@ -787,11 +792,14 @@ function openSettings(){
     <div class="sgroup">Pad de acordes</div>${rng('padHold','Mantener (pads)',0,100)}
     <div class="srow"><div><b>Restablecer acordes</b><small>Vuelve a Dm Em F Am C Cm G D en una fila</small></div><button class="btn danger" id="sReset">Restablecer</button></div>
     <div class="sgroup">General</div>${rng('volume','Volumen',10,100)}
+    <div class="srow"><div><b>Búfer de audio</b><small>Si escuchas chasquidos o distorsión, usa Normal o Estable. Baja latencia responde más rápido pero exige más al teléfono.</small></div><select id="sLat"><option value="low"${S.latency==='low'?' selected':''}>Baja latencia</option><option value="normal"${S.latency==='normal'?' selected':''}>Normal</option><option value="stable"${S.latency==='stable'?' selected':''}>Estable</option></select></div>
+    <div class="srow"><div><b>Versión</b><small>Chord Live Pro ${APP_VERSION}</small></div></div>
     <div class="srow"><div><b>Carpeta de la app</b><small>${NATIVE?'Documentos/ChordLivePro (sf2, instrumentos y grabaciones exportadas)':'En el navegador los archivos quedan dentro del navegador y las exportaciones van a Descargas.'}</small></div></div>
     <div style="height:24px"></div></div>`);
   b.querySelector('#sBack').onclick=closeAll;
   b.querySelectorAll('[data-ck]').forEach(c=>c.onclick=()=>{const k=c.dataset.ck;S[k]=!S[k];c.classList.toggle('on',S[k]);save();if(E)E.apply();syncTop();metroSync();});
   b.querySelectorAll('[data-rg]').forEach(r=>r.oninput=()=>{const k=r.dataset.rg;S[k]=+r.value;b.querySelector(`[data-rv="${k}"]`).textContent=S[k];save();if(E)E.apply();if(k==='visible')keyboards.forEach(x=>x.layout());});
+  b.querySelector('#sLat').onchange=async e=>{S.latency=e.target.value;save();if(ctx){REC=null;stopPlayback();clearInterval(metro.timer);metro.running=false;try{await ctx.close();}catch(_){}ctx=null;E=null;}audio();metroSync();toast('Audio reiniciado');};
   b.querySelector('#sMeter').onchange=e=>{S.meter=+e.target.value;save();beatDots();};
   let armed=false;b.querySelector('#sReset').onclick=e=>{if(!armed){armed=true;e.target.textContent='¿Seguro? Toca otra vez';return;}S.banks=[PRESETS[0].map(c=>({...c}))];S.perRow=8;editing=null;save();render();e.target.textContent='Listo';armed=false;};
 }
@@ -866,6 +874,7 @@ $('#btnSus').onclick=()=>{S.sus=!S.sus;save();syncTop();toast(S.sus?'Sustain act
 $('#btnMode').onclick=openModes;$('#btnLabels').onclick=openLabels;$('#btnInst').onclick=openInst;$('#btnMenu').onclick=openMenu;
 document.addEventListener('contextmenu',e=>e.preventDefault());
 window.addEventListener('resize',()=>keyboards.forEach(k=>k.layout()));
+$('#splashVer').textContent='Versión '+APP_VERSION;
 render();
 loadCustomList().then(()=>{if(S.inst.startsWith('sf:'))loadCustom(S.inst).catch(()=>{S.inst='piano';save();});});
 })();

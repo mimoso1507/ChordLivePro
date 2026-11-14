@@ -4,7 +4,7 @@ App personal de piano con pads de acordes para Android: teclado con tira de desp
 
 ## Instalar en el teléfono
 
-1. En el teléfono, abre **Releases** de este repositorio (iniciando sesión en GitHub) y descarga `ChordLivePro.apk` de la versión más reciente.
+1. En el teléfono, abre **Releases** de este repositorio (iniciando sesión en GitHub) y descarga `ChordLivePro-v1.0.N.apk` (N sube con cada versión; también se ve en el menú de la app) de la versión más reciente.
 2. Ábrela. Si Android lo pide, permite "Instalar apps desconocidas" para el navegador o el gestor de archivos.
 3. Las versiones nuevas se instalan encima de la anterior sin perder tus datos.
 

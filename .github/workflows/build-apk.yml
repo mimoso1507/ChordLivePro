@@ -19,13 +19,18 @@ jobs:
           node-version: 22
           cache: npm
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
 
       - name: Instalar dependencias
         run: npm ci
+
+      - name: Poner el número de versión
+        run: |
+          echo "APP_VERSION=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
+          sed -i "s/__APP_VERSION__/1.0.${{ github.run_number }}/" www/index.html
 
       - name: Copiar la app web al proyecto Android
         run: npx cap sync android
@@ -35,19 +40,19 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
-          cp app/build/outputs/apk/release/app-release.apk ../ChordLivePro.apk
+          cp app/build/outputs/apk/release/app-release.apk ../ChordLivePro-v${APP_VERSION}.apk
 
       - name: Guardar APK como artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: ChordLivePro-apk
-          path: ChordLivePro.apk
+          name: ChordLivePro-v${{ env.APP_VERSION }}
+          path: ChordLivePro-v*.apk
 
       - name: Publicar en Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: Chord Live Pro 1.0.${{ github.run_number }}
-          body: APK lista para instalar en Android. Descarga ChordLivePro.apk desde este teléfono.
-          files: ChordLivePro.apk
+          body: APK lista para instalar en Android. Descarga ChordLivePro-v${{ env.APP_VERSION }}.apk desde el teléfono.
+          files: ChordLivePro-v*.apk
           make_latest: true
