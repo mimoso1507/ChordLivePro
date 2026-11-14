@@ -35,6 +35,11 @@ function crearVentana() {
     if (input.key === 'F11') { win.setFullScreen(!win.isFullScreen()); event.preventDefault(); }
   });
 
+  // Permite controladores MIDI (USB y Bluetooth) sin preguntar
+  const midi = (p) => p === 'midi' || p === 'midiSysex';
+  session.defaultSession.setPermissionRequestHandler((_wc, permiso, ok) => ok(midi(permiso)));
+  session.defaultSession.setPermissionCheckHandler((_wc, permiso) => midi(permiso));
+
   // Las exportaciones (MIDI, WAV, MP3) se guardan solas en Documentos/ChordLivePro/grabaciones
   session.defaultSession.on('will-download', (_e, item) => {
     item.setSavePath(path.join(carpeta('grabaciones'), item.getFilename()));

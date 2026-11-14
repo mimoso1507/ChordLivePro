@@ -218,6 +218,9 @@ select{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid #c9ccd4;b
 .dsw{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-dim)}.dsw input{width:80px;accent-color:var(--accent)}
 .dbpm{margin-left:auto;display:flex;align-items:center;gap:6px}.dbpm span{font-size:14px;font-variant-numeric:tabular-nums;color:var(--ink);min-width:64px;text-align:right}
 .dbpm button{width:38px;height:38px;border-radius:8px;background:var(--panel-2);font-size:22px}
+.keycap{min-width:92px;padding:8px 12px;border-radius:8px;background:#fff;border:1.5px solid #c9ccd4;border-bottom-width:3px;font-weight:600;color:var(--sheet-ink);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.midicap{min-width:120px;background:#eef4fb}
+.keycap.wait{border-color:#1f78c8;color:#1f78c8}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
@@ -706,6 +709,7 @@ const IC={
   trash:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.8 9h6.4l.8-9"/></svg>',
   folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 6.5h6l2 2h10v11H3z"/><path d="M3 10h18"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M5.5 18.5l1.8-1.8M16.7 7.3l1.8-1.8"/><circle cx="12" cy="12" r="6.6"/></svg>',
+  keys:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h1M9.5 10h1M13 10h1M16.5 10h1M6 14h12" stroke-linecap="round"/></svg>',
   full:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
   back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H5M11 5l-7 7 7 7"/></svg>',
   mChords:'<svg viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="28" height="28"/><path d="M3 12.3h28M3 21.7h28M12.3 3v28M21.7 3v28"/><circle cx="21.7" cy="12.3" r="2.4" fill="currentColor"/><circle cx="12.3" cy="21.7" r="2.4" fill="currentColor"/><circle cx="21.7" cy="26" r="2.4" fill="currentColor"/></svg>',
@@ -929,6 +933,7 @@ function openMenu(){
     <div style="height:6px"></div>
     <button class="dlink" id="mRecs">${IC.folder}Lista de grabaciones</button>
     <button class="dlink" id="mSet">${IC.gear}Ajustes</button>
+    <button class="dlink" id="mKeys">${IC.keys}Editar teclas</button>
     <button class="dlink" id="mFull">${IC.full}Pantalla completa</button>
     <div class="dver">Chord Live Pro · versión ${APP_VERSION}</div>`,{drawer:true});
   b.querySelectorAll('[data-sw]').forEach(s=>s.onclick=()=>{const k=s.dataset.sw;S[k]=!S[k];s.classList.toggle('on',S[k]);save();if(E)E.apply();syncTop();keyboards.forEach(x=>x.position());});
@@ -938,7 +943,7 @@ function openMenu(){
     b.querySelector(`[data-val="${k}"]`).textContent=v;editing=null;save();render();});
   b.querySelector('#mQ').onchange=e=>{S.quant=e.target.value;save();toast(S.quant==='off'?'Cuantizar apagado':'Las próximas grabaciones se cuantizarán');};
   b.querySelector('#mQS').oninput=e=>{S.qStrength=+e.target.value;b.querySelector('#mQSv').textContent=S.qStrength+'%';save();};
-  b.querySelector('#mRecs').onclick=openRecs;b.querySelector('#mSet').onclick=openSettings;
+  b.querySelector('#mRecs').onclick=openRecs;b.querySelector('#mSet').onclick=openSettings;b.querySelector('#mKeys').onclick=openKeymap;
   b.querySelector('#mFull').onclick=()=>{closeAll();const d=document.documentElement;const p=d.requestFullscreen?d.requestFullscreen():null;
     if(p)p.then(()=>{try{screen.orientation.lock('landscape').catch(()=>{});}catch(e){}}).catch(()=>toast('Pantalla completa no disponible aquí'));else toast('Pantalla completa no disponible aquí');};
 }
@@ -968,10 +973,11 @@ function openSettings(){
     <div class="srow"><div><b>Restablecer acordes</b><small>Vuelve a Dm Em F Am C Cm G D en una fila</small></div><button class="btn danger" id="sReset">Restablecer</button></div>
     <div class="sgroup">General</div>${rng('volume','Volumen',10,100)}
     <div class="srow"><div><b>Búfer de audio</b><small>Baja latencia responde más rápido. Si escuchas chasquidos, usa Normal o Estable.${ctx?` Latencia medida: ${Math.round(((ctx.baseLatency||0)+(ctx.outputLatency||0))*1000)} ms.`:''}</small></div><select id="sLat"><option value="low"${S.latency==='low'?' selected':''}>Baja latencia</option><option value="normal"${S.latency==='normal'?' selected':''}>Normal</option><option value="stable"${S.latency==='stable'?' selected':''}>Estable</option></select></div>
+    <div class="srow"><div><b>Editar teclas</b><small>Asigna teclas de la computadora al piano, los acordes y las funciones</small></div><button class="btn" id="sKeys">Editar teclas</button></div>
     <div class="srow"><div><b>Versión</b><small>Chord Live Pro ${APP_VERSION}</small></div></div>
     <div class="srow"><div><b>Carpeta de la app</b><small>${NATIVE?'Documentos/ChordLivePro (sf2, instrumentos y grabaciones exportadas)':'En el navegador los archivos quedan dentro del navegador y las exportaciones van a Descargas.'}</small></div></div>
     <div style="height:24px"></div></div>`);
-  b.querySelector('#sBack').onclick=closeAll;
+  b.querySelector('#sBack').onclick=closeAll;b.querySelector('#sKeys').onclick=openKeymap;
   b.querySelectorAll('[data-ck]').forEach(c=>c.onclick=()=>{const k=c.dataset.ck;S[k]=!S[k];c.classList.toggle('on',S[k]);save();if(E)E.apply();syncTop();metroSync();});
   b.querySelectorAll('[data-rg]').forEach(r=>r.oninput=()=>{const k=r.dataset.rg;S[k]=+r.value;b.querySelector(`[data-rv="${k}"]`).textContent=S[k];save();if(E)E.apply();if(k==='visible')keyboards.forEach(x=>x.layout());});
   b.querySelector('#sLat').onchange=async e=>{S.latency=e.target.value;save();if(ctx){REC=null;stopPlayback();clearInterval(metro.timer);metro.running=false;try{await ctx.close();}catch(_){}ctx=null;E=null;}audio();metroSync();toast('Audio reiniciado');};
@@ -1040,7 +1046,7 @@ function stopRec(){const r=REC;REC=null;if(r&&r.startedDrums)dmStop();clearInter
 
 /* =================== barra superior =================== */
 $('#btnBack').onclick=()=>{if(layer.firstChild){closeAll();return;}if(drumView){drumView=false;render();return;}if(editing){editing=null;render();return;}$('#splash').hidden=false;};
-$('#btnGo').onclick=()=>{audio();$('#splash').hidden=true;metroSync();prepareInstrument(S.inst);prepareDrums(S.kit);};
+$('#btnGo').onclick=()=>{audio();$('#splash').hidden=true;metroSync();initMidi();prepareInstrument(S.inst);prepareDrums(S.kit);};
 const mt=$('#btnMetro');let mtLP=null,mtLong=false;
 mt.addEventListener('pointerdown',()=>{mtLong=false;mtLP=setTimeout(()=>{mtLong=true;openMetroPop(mt);},500);});
 mt.addEventListener('pointerup',()=>clearTimeout(mtLP));mt.addEventListener('pointerleave',()=>clearTimeout(mtLP));
@@ -1061,28 +1067,127 @@ document.addEventListener('contextmenu',e=>e.preventDefault());
 window.addEventListener('resize',()=>keyboards.forEach(k=>k.layout()));
 $('#splashVer').textContent='Versión '+APP_VERSION;
 /* =================== teclado de la computadora =================== */
-const KMAP={KeyA:0,KeyW:1,KeyS:2,KeyE:3,KeyD:4,KeyF:5,KeyT:6,KeyG:7,KeyY:8,KeyH:9,KeyU:10,KeyJ:11,KeyK:12,KeyO:13,KeyL:14,KeyP:15,Semicolon:16,Quote:17};
-const kHeld=new Map();let kOct=S.kOct||4;
+/* Asignaciones: acción -> tecla ("KeyA", "Shift+Digit1"...). Se guardan en S.keymap y se pueden cambiar en Ajustes. */
+const PIANO_CODES=['KeyA','KeyW','KeyS','KeyE','KeyD','KeyF','KeyT','KeyG','KeyY','KeyH','KeyU','KeyJ','KeyK','KeyO','KeyL','KeyP','Semicolon','Quote'];
+const NOTE_ES=['Do','Do#','Re','Re#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
+function defaultKeymap(){const k={};PIANO_CODES.forEach((c,i)=>k['n:'+i]=c);
+  for(let c=0;c<10;c++){const d='Digit'+((c+1)%10);k['p:0:'+c]=d;k['p:1:'+c]='Shift+'+d;}
+  Object.assign(k,{octDown:'KeyZ',octUp:'KeyX',drum:'Space',rec:'KeyR',metro:'KeyM',sus:'KeyV'});return k;}
+if(!S.keymap)S.keymap=defaultKeymap();
+function keyActions(){const a=[];
+  a.push({group:'Piano'});for(let i=0;i<18;i++)a.push({id:'n:'+i,name:NOTE_ES[i%12]+(i>=12?' (octava de arriba)':'')});
+  a.push({group:'Funciones'});[['octDown','Bajar octava'],['octUp','Subir octava'],['drum','Tocar / parar caja de ritmos'],['rec','Grabar / parar (REC)'],['metro','Metrónomo'],['sus','Sustain']].forEach(([id,name])=>a.push({id,name}));
+  S.banks.forEach((bank,b)=>{a.push({group:'Acordes · fila '+(b+1)});bank.forEach((ch,c)=>a.push({id:`p:${b}:${c}`,name:`Columna ${c+1} (${chordName(ch)})`}));});
+  return a;}
+const KEYNAMES={Space:'Espacio',Semicolon:'Ñ',Quote:'´ / {',BracketLeft:'[',BracketRight:']',Backquote:'º',Minus:'-',Equal:'=',Comma:',',Period:'.',Slash:'/',Backslash:'\\',
+  Enter:'Enter',Tab:'Tab',ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→',IntlBackslash:'<'};
+function keyLabel(b){if(!b)return '—';const sh=b.startsWith('Shift+'),c=sh?b.slice(6):b;
+  let l=KEYNAMES[c]||c.replace(/^Key/,'').replace(/^Digit/,'').replace(/^Numpad/,'Num ');return (sh?'Mayús + ':'')+l;}
+let keyIndex={};function rebuildKeyIndex(){keyIndex={};for(const [a,b] of Object.entries(S.keymap))if(b)keyIndex[b]=a;}
+rebuildKeyIndex();
+const kHeld=new Map();let kOct=S.kOct||4;let capturing=null,midiLearn=null;
+if(!S.midimap)S.midimap={};
+let midiIndex={};function rebuildMidiIndex(){midiIndex={};for(const [a,b] of Object.entries(S.midimap))if(b)midiIndex[b]=a;}rebuildMidiIndex();
 const kbVisual=(m,on)=>{for(const k of keyboards){const e=k.els[m];if(e)e.classList.toggle('down',on);}};
-const padByKey=(code,shift)=>{const d=/^Digit(\d)$/.exec(code);if(!d)return null;const i=(+d[1]+9)%10,b=shift?1:0;return S.banks[b]&&S.banks[b][i]?{b,i}:null;};
+/* Una "acción" (nota del piano, columna de acordes o función) puede dispararla una tecla de la PC o un control MIDI */
+function pressAction(act,hk,vel=.8){if(kHeld.has(hk))return;
+  if(act==='octDown'||act==='octUp'){kOct=clamp(kOct+(act==='octUp'?1:-1),1,7);S.kOct=kOct;save();toast('Octava del teclado externo: '+kOct);return;}
+  if(act==='drum'){DM.playing?dmStop():dmStart();return;}
+  if(act==='rec'){$('#btnRec').click();return;}
+  if(act==='metro'){audio();S.metro=!S.metro;save();metroSync();toast(S.metro?'Metrónomo '+S.bpm+' BPM':'Metrónomo apagado');return;}
+  if(act==='sus'){$('#btnSus').click();return;}
+  if(act.startsWith('n:')){const m=12*(kOct+1)+(+act.slice(2));kHeld.set(hk,{h:noteOn(m,vel),m});kbVisual(m,true);buzz();return;}
+  if(act.startsWith('p:')){const [,b,c]=act.split(':').map(Number);const ch=S.banks[b]&&S.banks[b][c];if(!ch)return;
+    const ns=cellNotes(ch,'head'),nv=.68*Math.min(1,1.7/Math.sqrt(ns.length));
+    kHeld.set(hk,{hs:ns.map((m,k)=>noteOn(m,nv,k*.018)),b,c});
+    document.querySelectorAll(`.cell.head[data-b="${b}"][data-c="${c}"]`).forEach(x=>x.classList.add('hit'));}}
+function releaseAction(hk){const h=kHeld.get(hk);if(!h)return;kHeld.delete(hk);
+  if(h.h){noteOff(h.h,'key');if(![...kHeld.values()].some(x=>x.m===h.m))kbVisual(h.m,false);}
+  if(h.hs){h.hs.forEach(x=>noteOff(x,'pad'));document.querySelectorAll(`.cell.head[data-b="${h.b}"][data-c="${h.c}"]`).forEach(x=>x.classList.remove('hit'));}}
 document.addEventListener('keydown',e=>{
+  if(capturing){e.preventDefault();e.stopPropagation();capturing(e);return;}
   if(e.key==='Escape'){if(layer.firstChild)closeAll();else if(editing){editing=null;render();}else if(drumView){drumView=false;render();}return;}
   const tg=e.target;if(tg&&(tg.tagName==='INPUT'||tg.tagName==='SELECT'||tg.tagName==='TEXTAREA'))return;
-  if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||!$('#splash').hidden)return;
-  if(e.code==='KeyZ'){kOct=clamp(kOct-1,1,7);S.kOct=kOct;save();toast('Teclado de la PC: octava '+kOct);return;}
-  if(e.code==='KeyX'){kOct=clamp(kOct+1,1,7);S.kOct=kOct;save();toast('Teclado de la PC: octava '+kOct);return;}
-  if(e.code==='Space'){e.preventDefault();DM.playing?dmStop():dmStart();return;}
-  if(kHeld.has(e.code))return;
-  if(e.code in KMAP){const m=12*(kOct+1)+KMAP[e.code];kHeld.set(e.code,{h:noteOn(m,.8),m});kbVisual(m,true);buzz();return;}
-  const pd=padByKey(e.code,e.shiftKey);if(pd){const ch=S.banks[pd.b][pd.i];const ns=cellNotes(ch,'head');const nv=.68*Math.min(1,1.7/Math.sqrt(ns.length));
-    kHeld.set(e.code,{hs:ns.map((m,k)=>noteOn(m,nv,k*.018))});
-    document.querySelectorAll(`.cell.head[data-b="${pd.b}"][data-c="${pd.i}"]`).forEach(x=>x.classList.add('hit'));}
+  if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||!$('#splash').hidden||layer.firstChild)return;
+  const act=keyIndex[(e.shiftKey?'Shift+':'')+e.code]||(e.shiftKey?keyIndex[e.code]:null);if(!act)return;
+  e.preventDefault();pressAction(act,e.code);
 });
-document.addEventListener('keyup',e=>{const h=kHeld.get(e.code);if(!h)return;kHeld.delete(e.code);
-  if(h.h){noteOff(h.h,'key');if(![...kHeld.values()].some(x=>x.m===h.m))kbVisual(h.m,false);}
-  if(h.hs){h.hs.forEach(x=>noteOff(x,'pad'));document.querySelectorAll('.cell.head.hit').forEach(x=>x.classList.remove('hit'));}});
-window.addEventListener('blur',()=>{for(const [c,h] of kHeld){if(h.h){noteOff(h.h,'key');kbVisual(h.m,false);}if(h.hs)h.hs.forEach(x=>noteOff(x,'pad'));}kHeld.clear();});
-if(DESKTOP){$('.tag').textContent='Toca con el ratón o con el teclado: A W S E D F T G Y H U J K O L P son las teclas del piano, Z y X cambian de octava, 1 al 0 tocan los acordes (Mayús para la segunda fila) y la barra espaciadora arranca el ritmo. ESC sale de pantalla completa y F11 vuelve.';}
+document.addEventListener('keyup',e=>releaseAction(e.code));
+window.addEventListener('blur',()=>{for(const hk of [...kHeld.keys()])releaseAction(hk);});
+
+/* =================== controladores MIDI (USB y Bluetooth) =================== */
+const MIDI={names:[],note:'Buscando controladores MIDI…',cc:{},down:{}};
+const midiBind={n:'Nota',c:'Control (CC)',g:'Programa'};
+function midiLabel(b){if(!b)return '—';const m=/^M:([ncg])(\d+)$/.exec(b);if(!m)return '—';return m[1]==='n'?NOTE_ES[+m[2]%12]+(Math.floor(+m[2]/12)-1)+' (nota '+m[2]+')':(m[1]==='c'?'CC ':'PC ')+m[2];}
+function handleMidiBytes(data){const n=data.length;let i=0;
+  while(i<n){const st=data[i];if(st<0x80){i++;continue;}
+    if(st===0xF0){while(i<n&&data[i]!==0xF7)i++;i++;continue;}
+    if(st>=0xF0){i++;continue;}
+    const t=st&0xF0,need=(t===0xC0||t===0xD0)?1:2;if(i+need>n-1)break;
+    midiMsg(t,data[i+1]||0,data[i+2]||0);i+=1+need;}}
+function midiMsg(t,d1,d2){
+  const on=t===0x90&&d2>0,off=t===0x80||(t===0x90&&d2===0);
+  let id,down;
+  if(on||off){id='M:n'+d1;down=on;}
+  else if(t===0xB0){id='M:c'+d1;down=d2>=64;}
+  else if(t===0xC0){id='M:g'+d1;down=true;}
+  else return;
+  if(midiLearn){const wasDown=!!MIDI.down[id];if(t===0xB0)MIDI.down[id]=down;
+    if(down&&!(t===0xB0&&wasDown)){const f=midiLearn;midiLearn=null;f(id);}return;}
+  const act=midiIndex[id];
+  if(act){
+    if(t===0xB0){const was=!!MIDI.down[id];MIDI.down[id]=down;if(down&&!was)pressAction(act,id,Math.max(.25,d2/127));else if(!down&&was)releaseAction(id);}
+    else if(t===0xC0){pressAction(act,id);setTimeout(()=>releaseAction(id),180);}
+    else if(down)pressAction(act,id,Math.max(.25,d2/127));else releaseAction(id);
+    return;}
+  /* sin asignar: el controlador toca directamente las notas; el pedal (CC 64) hace de sustain */
+  if(on||off){const hk='T'+d1;if(on){if(kHeld.has(hk))releaseAction(hk);audio();kHeld.set(hk,{h:noteOn(d1,Math.max(.2,d2/127)),m:d1});kbVisual(d1,true);}else releaseAction(hk);}
+  else if(t===0xB0&&d1===64){S.sus=d2>=64;syncTop();}}
+function midiStatusText(){return MIDI.names.length?('Conectado: '+MIDI.names.join(', ')):MIDI.note;}
+async function initMidi(){
+  let nativeOk=false;
+  if(NATIVE&&CAP.registerPlugin){try{const P=CAP.registerPlugin('MidiIn');
+      await P.addListener('midi',ev=>handleMidiBytes(ev.data||[]));
+      await P.addListener('devices',ev=>{MIDI.names=ev.names||[];refreshMidiLabel();});
+      const r=await P.start();nativeOk=!!(r&&r.supported);
+      if(nativeOk){MIDI.note='Conecta un teclado o controlador MIDI por USB (cable OTG)';}}catch(e){}}
+  if(!nativeOk&&navigator.requestMIDIAccess){
+    try{const acc=await navigator.requestMIDIAccess({sysex:false});
+      const hook=()=>{const names=[];acc.inputs.forEach(inp=>{inp.onmidimessage=ev=>handleMidiBytes(Array.from(ev.data));names.push(inp.name||'Dispositivo MIDI');});MIDI.names=names;if(!names.length)MIDI.note='Conecta un controlador MIDI (USB o Bluetooth) y aparecerá aquí';refreshMidiLabel();};
+      acc.onstatechange=hook;hook();nativeOk=true;}
+    catch(e){MIDI.note='El permiso de MIDI fue rechazado';}}
+  if(!nativeOk&&!MIDI.names.length&&MIDI.note==='Buscando controladores MIDI…')MIDI.note='Este dispositivo no permite MIDI en la app';
+  refreshMidiLabel();}
+function refreshMidiLabel(){const x=document.getElementById('kmMidi');if(x)x.textContent=midiStatusText();}
+
+function openKeymap(){
+  const b=modal(`<div class="settings"><div class="shead"><button id="kmBack" aria-label="Volver">${IC.back}</button>Editar teclas</div>
+    <div class="srow"><div><b>Controladores MIDI</b><small id="kmMidi">${midiStatusText()}</small></div></div>
+    <div class="srow"><div><b>Cómo asignar</b><small>Toca el botón de <b>Tecla</b> y pulsa la tecla que quieras (puedes usar Mayús + tecla). Toca el botón de <b>MIDI</b> y luego pulsa o mueve un control de tu controlador. Supr o Retroceso lo deja sin asignar; ESC cancela. Un teclado MIDI sin asignar toca las notas directamente.</small></div><button class="btn danger" id="kmReset">Restablecer</button></div>
+    <div id="kmList"></div><div style="height:24px"></div></div>`);
+  const list=b.querySelector('#kmList');
+  const stopCap=()=>{capturing=null;midiLearn=null;};
+  const draw=()=>{list.innerHTML='';for(const a of keyActions()){if(a.group){list.appendChild(el('div','sgroup',a.group));continue;}
+    const row=el('div','srow',`<div><b>${a.name.replace(/</g,'&lt;')}</b></div>`);
+    const kb=el('button','keycap',keyLabel(S.keymap[a.id]));kb.setAttribute('aria-label','Tecla para '+a.name);
+    kb.onclick=()=>{stopCap();list.querySelectorAll('.keycap.wait').forEach(x=>x.classList.remove('wait'));kb.classList.add('wait');kb.textContent='Pulsa una tecla…';
+      capturing=ev=>{if(['ShiftLeft','ShiftRight','ControlLeft','ControlRight','AltLeft','AltRight','MetaLeft','MetaRight'].includes(ev.code))return;capturing=null;
+        if(ev.code==='Escape'){draw();return;}
+        if(ev.code==='Backspace'||ev.code==='Delete'){S.keymap[a.id]='';}
+        else{const bind=(ev.shiftKey?'Shift+':'')+ev.code;for(const k in S.keymap)if(S.keymap[k]===bind)S.keymap[k]='';S.keymap[a.id]=bind;}
+        save();rebuildKeyIndex();draw();};};
+    row.appendChild(kb);
+    if(!a.id.startsWith('n:')){const mb=el('button','keycap midicap',midiLabel(S.midimap[a.id]));mb.setAttribute('aria-label','Control MIDI para '+a.name);
+      mb.onclick=()=>{stopCap();list.querySelectorAll('.keycap.wait').forEach(x=>x.classList.remove('wait'));mb.classList.add('wait');mb.textContent='Toca el control…';
+        capturing=ev=>{if(ev.code==='Escape'){stopCap();draw();}else if(ev.code==='Backspace'||ev.code==='Delete'){S.midimap[a.id]='';stopCap();save();rebuildMidiIndex();draw();}};
+        midiLearn=bind=>{capturing=null;for(const k in S.midimap)if(S.midimap[k]===bind)S.midimap[k]='';S.midimap[a.id]=bind;save();rebuildMidiIndex();draw();};};
+      row.appendChild(mb);}
+    list.appendChild(row);}};
+  draw();
+  b.querySelector('#kmBack').onclick=()=>{stopCap();closeAll();};
+  let armed=false;b.querySelector('#kmReset').onclick=e=>{if(!armed){armed=true;e.target.textContent='¿Seguro?';return;}S.keymap=defaultKeymap();S.midimap={};save();rebuildKeyIndex();rebuildMidiIndex();draw();e.target.textContent='Restablecer';armed=false;toast('Asignaciones restablecidas');};
+}
+if(DESKTOP){$('.tag').textContent='Toca con el ratón o con el teclado: A W S E D F T G Y H U J K O L P son el piano, Z y X cambian de octava, 1 al 0 tocan los acordes (Mayús para la segunda fila), Espacio arranca el ritmo, R graba, M metrónomo y V sustain. Puedes cambiarlas, y asignar un controlador MIDI, en Menú → Editar teclas. ESC sale de pantalla completa y F11 vuelve.';}
 render();
 loadCustomList().then(()=>{if(S.inst.startsWith('sf:'))loadCustom(S.inst).catch(()=>{S.inst='piano';save();});});
 })();
